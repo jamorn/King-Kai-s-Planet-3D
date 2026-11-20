@@ -68,14 +68,50 @@ function placeWellInFrontOfHouse(
 }
 
 /**
+ * ผูกปุ่มย่อ/ขยาย panel ข้อมูลดาว (info panel)
+ * - คลิกหัว panel เพื่อสลับสถานะย่อ/ขยายได้เอง
+ * - ตั้งค่าเริ่มต้นเป็น "ย่อ" แล้วค่อยเรียกมาจาก hideLoadingScreen
+ *   เพื่อให้ panel ย่อ "หลัง" loading หายไปแล้วจริงๆ
+ */
+function setupInfoPanel(): () => void {
+  const panel = document.getElementById("info-panel");
+  const toggle = document.getElementById("info-panel-toggle");
+
+  const setExpanded = (expanded: boolean): void => {
+    panel?.classList.toggle("is-collapsed", !expanded);
+    toggle?.setAttribute("aria-expanded", String(expanded));
+  };
+
+  // คลิกหัว panel → สลับสถานะ (ถ้ากำลังย่ออยู่ ให้ขยาย, ถ้าขยายอยู่ ให้ย่อ)
+  toggle?.addEventListener("click", () => {
+    const currentlyCollapsed =
+      panel?.classList.contains("is-collapsed") ?? false;
+    setExpanded(currentlyCollapsed);
+  });
+
+  // เริ่มต้นให้ panel ขยายเต็มก่อน (ระหว่าง loading) แล้วค่อยย่อทีหลัง
+  setExpanded(true);
+
+  // คืนฟังก์ชันสำหรับสั่งย่อ (ให้ hideLoadingScreen เรียกหลัง loading หาย)
+  return () => setExpanded(false);
+}
+
+/**
  * ซ่อน Loading Screen หลังเฟรมแรก render เสร็จจริง
  * (รอ 2 เฟรมให้ GPU วาดเฟรมแรกเสร็จก่อน เพื่อไม่ให้เห็นจอว่างคั่นกลาง)
+ *
+ * @param onHidden  callback ที่จะเรียก "หลัง" loading จางหายเสร็จแล้ว
+ *                  (ใช้ให้ info panel ค่อยย่อหลังผู้ใช้เห็นฉากจริงแล้ว)
  */
-function hideLoadingScreen(minDurationMs = 1500): void {
+function hideLoadingScreen(onHidden?: () => void, minDurationMs = 1500): void {
   const loadingScreen = document.getElementById("loading-screen");
-  if (!loadingScreen) return;
+  if (!loadingScreen) {
+    onHidden?.();
+    return;
+  }
 
   const startTime = performance.now();
+  const FADE_MS = 800;
 
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
@@ -84,7 +120,11 @@ function hideLoadingScreen(minDurationMs = 1500): void {
 
       window.setTimeout(() => {
         loadingScreen.classList.add("is-hidden");
-        window.setTimeout(() => loadingScreen.remove(), 800);
+        window.setTimeout(() => {
+          loadingScreen.remove();
+          // แจ้ง caller ว่า loading หายแล้ว (ค่อยย่อ panel ตอนนี้)
+          onHidden?.();
+        }, FADE_MS);
       }, remaining);
     });
   });
@@ -163,8 +203,10 @@ function bootstrap(): void {
   // 8. เริ่มต้น Render Loop!
   engine.start();
 
-  // ✅ ซ่อน Loading Screen หลังเฟรมแรก render เสร็จ
-  hideLoadingScreen();
+  // 9. ตั้งค่า panel ข้อมูล (ได้ตัวสั่งย่อกลับมา) แล้วซ่อน Loading Screen
+  //    → เมื่อ loading จางหายเสร็จ ค่อยย่อ panel เพื่อไม่ให้บังการแสดงผลดาว
+  const collapseInfoPanel = setupInfoPanel();
+  hideLoadingScreen(collapseInfoPanel);
 
   // คืนทรัพยากรเมื่อปิดหน้าเว็บ
   window.addEventListener("beforeunload", () => {

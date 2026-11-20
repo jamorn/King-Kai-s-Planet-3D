@@ -10,18 +10,51 @@
     transform: translateX(360%);
   }
 }
-
 .animate-loading-bar {
   animation: loading-bar 1.2s ease-in-out infinite;
 }
-
 #loading-screen {
-  transition: opacity 0.7s ease-out;
+  transition: opacity 0.8s ease-out;
 }
 #loading-screen.is-hidden {
   opacity: 0;
   pointer-events: none;
   visibility: hidden;
+}
+
+/* ===== Info Panel (collapse/expand) ===== */
+.info-panel {
+  overflow: hidden;
+  transition:
+    transform 0.45s ease-out,
+    box-shadow 0.45s ease-out,
+    opacity 0.45s ease-out;
+  transform-origin: top left;
+}
+.info-panel-body {
+  transition:
+    max-height 0.35s ease-out,
+    opacity 0.35s ease-out,
+    padding 0.35s ease-out;
+  max-height: 200px;
+  opacity: 1;
+}
+
+/* สถานะย่อ: ซ่อนเนื้อหา + ลดความเด่นของ panel */
+.info-panel.is-collapsed .info-panel-body {
+  max-height: 0;
+  opacity: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+.info-panel.is-collapsed {
+  /* ลดความเด่นของการ์ดให้ดูไม่บังฉาก (ใช้ opacity + ย่อเล็กน้อย) */
+  opacity: 0.85;
+  transform: scale(0.96);
+}
+/* ให้ chevron หมุนชี้ไปทางขวาเมื่อย่อ */
+.info-panel.is-collapsed #info-panel-chevron {
+  transform: rotate(-90deg);
 }
 
 @layer base {
@@ -36,26 +69,20 @@
     user-select: none;
     -webkit-user-select: none;
   }
-
-  /* ใช้ viewport สูงสุดจริงบนมือถือ */
   html,
   body {
     height: 100dvh;
   }
-
-  /* กัน gesture ซูม/เลื่อนทั้งหน้าทับการหมุนกล้องบนจอสัมผัส */
   #app {
     touch-action: none;
     overscroll-behavior: none;
   }
-
   canvas {
     display: block;
     outline: none;
     cursor: grab;
     touch-action: none;
   }
-
   canvas:active {
     cursor: grabbing;
   }

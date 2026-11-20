@@ -12,28 +12,23 @@
     <!-- 3D WebGL Canvas Container -->
     <div id="app" class="w-full h-full"></div>
 
-    <!-- ===== Loading Screen (แสดงทันทีด้วย CSS, ซ่อนเมื่อเฟรมแรก render เสร็จ) ===== -->
+    <!-- ===== Loading Screen ===== -->
     <div
       id="loading-screen"
       class="fixed inset-0 z-[999] flex flex-col items-center justify-center bg-gradient-to-b from-pink-400 via-pink-200 to-amber-100 transition-opacity duration-700 ease-out"
     >
-      <!-- ดาวเคราะห์ + ดาวบริวารโคจร -->
       <div class="relative mb-8 flex h-28 w-28 items-center justify-center">
-        <!-- เงาเรืองแสง -->
         <div
           class="absolute inset-0 rounded-full bg-orange-400/40 blur-xl animate-pulse"
         ></div>
-        <!-- ตัวดาวเคราะห์ -->
         <div
           class="relative h-20 w-20 rounded-full bg-gradient-to-br from-lime-400 to-green-600 shadow-[inset_-8px_-8px_20px_rgba(0,0,0,0.35)]"
         >
-          <!-- แถบถนนวงแหวนรอบดาว -->
           <div
             class="absolute left-1/2 top-1/2 h-20 w-32 rounded-full border-2 border-white/70"
             style="transform: translate(-50%, -50%) rotateX(72deg)"
           ></div>
         </div>
-        <!-- ดาวบริวารลอยฟ้า (วงโคจรหมุน) -->
         <div
           class="absolute inset-0 animate-spin rounded-full border border-dashed border-white/50"
           style="animation-duration: 6s"
@@ -44,7 +39,6 @@
         </div>
       </div>
 
-      <!-- ข้อความ -->
       <h2
         class="mb-1 text-xl font-extrabold tracking-wide text-slate-800 drop-shadow sm:text-2xl"
       >
@@ -54,7 +48,6 @@
         กำลังเดินทางสู่ปรโลก…
       </p>
 
-      <!-- แถบโหลด -->
       <div
         class="h-1.5 w-48 overflow-hidden rounded-full bg-white/50 shadow-inner sm:w-56"
       >
@@ -64,7 +57,7 @@
       </div>
     </div>
 
-    <!-- UI Overlay (pointer-events-none เพื่อไม่ให้บังการหมุน/ซูมกล้อง) -->
+    <!-- UI Overlay -->
     <div
       class="pointer-events-none fixed inset-0 flex flex-col justify-between p-3 sm:p-6"
       style="
@@ -72,14 +65,23 @@
         padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
       "
     >
-      <!-- ส่วนหัวมุมซ้ายบน: ป้ายข้อมูลดาวท่านไคโอ -->
+      <!-- ส่วนหัวมุมซ้ายบน: ป้ายข้อมูลดาวท่านไคโอ (collapse ได้) -->
       <header class="flex items-start justify-between">
         <div
-          class="rounded-2xl border-2 border-orange-400/80 bg-white/80 px-3 py-2.5 shadow-lg backdrop-blur-md sm:px-5 sm:py-3.5"
+          id="info-panel"
+          class="info-panel pointer-events-auto rounded-2xl border-2 border-orange-400/80 bg-white/80 shadow-lg backdrop-blur-md"
         >
-          <div class="flex items-center gap-2 sm:gap-2.5">
+          <!-- แถวหัว: คลิกเพื่อย่อ/ขยาย -->
+          <button
+            id="info-panel-toggle"
+            type="button"
+            class="flex w-full items-center gap-2 rounded-t-2xl px-3 py-2.5 text-left transition-colors duration-200 hover:bg-orange-50/60 sm:gap-2.5 sm:px-5 sm:py-3.5"
+            aria-expanded="true"
+            aria-controls="info-panel-body"
+            title="ย่อ/ขยายข้อมูล"
+          >
             <span
-              class="inline-block h-3 w-3 rounded-full bg-orange-500 ring-4 ring-orange-200 sm:h-3.5 sm:w-3.5"
+              class="inline-block h-3 w-3 shrink-0 rounded-full bg-orange-500 ring-4 ring-orange-200 sm:h-3.5 sm:w-3.5"
             ></span>
             <h1
               class="text-sm font-extrabold tracking-wide text-slate-800 sm:text-lg"
@@ -89,22 +91,41 @@
                 >(King Kai's Planet)</span
               >
             </h1>
+            <!-- ลูกศรบอกสถานะ -->
+            <svg
+              id="info-panel-chevron"
+              class="ml-auto h-4 w-4 shrink-0 text-slate-500 transition-transform duration-300"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </button>
+
+          <!-- เนื้อหารายละเอียด (ซ่อน/แสดงได้) -->
+          <div
+            id="info-panel-body"
+            class="info-panel-body px-3 pb-2.5 sm:px-5 sm:pb-3.5"
+          >
+            <p class="text-[11px] font-medium text-slate-600 sm:text-xs">
+              พิกัด: ปรโลก (Other World) •
+              <br class="sm:hidden" />
+              แรงโน้มถ่วง:
+              <span class="font-bold text-orange-600">10G (10 เท่าของโลก)</span>
+            </p>
           </div>
-          <p class="mt-1 text-[11px] font-medium text-slate-600 sm:text-xs">
-            พิกัด: ปรโลก (Other World) •
-            <br class="sm:hidden" />
-            แรงโน้มถ่วง:
-            <span class="font-bold text-orange-600">10G (10 เท่าของโลก)</span>
-          </p>
         </div>
       </header>
 
-      <!-- ส่วนล่าง: คำแนะนำการควบคุมกล้อง (แยกคู่คำแนะนำตามอุปกรณ์) -->
+      <!-- ส่วนล่าง: คำแนะนำการควบคุมกล้อง -->
       <footer class="flex justify-center">
         <div
           class="flex items-center gap-2 rounded-full border border-white/60 bg-slate-900/70 px-3 py-2 text-[11px] font-medium text-white shadow-md backdrop-blur-md sm:gap-4 sm:px-5 sm:text-xs"
         >
-          <!-- คำแนะนำสำหรับเมาส์ (แสดงบน md ขึ้นไป) -->
           <span class="hidden items-center gap-1.5 md:flex">
             <span
               class="rounded bg-white/20 px-1.5 py-0.5 text-[11px] font-bold"
@@ -121,7 +142,6 @@
             ซูมเข้า-ออก
           </span>
 
-          <!-- คำแนะนำสำหรับจอสัมผัส (แสดงบนจอเล็กกว่า md) -->
           <span class="flex items-center gap-1.5 md:hidden">
             <span
               class="rounded bg-white/20 px-1.5 py-0.5 text-[11px] font-bold"
