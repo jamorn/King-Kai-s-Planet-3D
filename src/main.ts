@@ -10,31 +10,29 @@ import { FloatingRock } from "./entities/vehicles/FloatingRock";
 import { Tree } from "./entities/props/Tree";
 import { Well } from "./entities/props/Well";
 import { Bench } from "./entities/props/Bench";
+import type { SurfaceEntity } from "./entities/base/SurfaceEntity";
 
 /**
- * วางวัตถุ SurfaceEntity ลงบนผิวดาว "ด้านหน้าประตูบ้าน" อย่างแม่นยำ
- * อ้างอิงทิศทางจริงของบ้านหลัง snapToSphere + rotateOnSurface:
- *   - forward = แกน +Z ของบ้าน (ทิศที่ประตูหันหน้าไป)
- *   - right   = แกน +X ของบ้าน (ทิศขวาของผู้ยืนหน้าประตู)
- * เลื่อนออกไปหน้าบ้านตาม forward + right แล้ว project กลับมาบนผิวดาว
+ * คำนวณตำแหน่งบนผิวดาว "ด้านหน้าบ้าน" จากทิศ forward/right จริงของบ้าน
+ * แล้ว snap วัตถุลงผิวดาวให้อัตโนมัติ (ใช้ร่วมกันทั้งบ่อน้ำและม้านั่ง)
+ *
+ * ขั้นตอน:
+ *   1. อ่าน basis ของบ้านใน world space (forward = +Z, right = +X)
+ *   2. ตัดองค์ประกอบ radial ออกให้ทั้งสองเวกเตอร์นอนบนระนาบ tangent
+ *   3. เลื่อนจากจุดบ้านตาม forward + right แล้ว project กลับมาบนผิวดาว
+ *   4. snapToSphere ที่ตำแหน่งนั้น
+ *
+ * @returns มุม spherical ที่วัตถุถูกวาง (เผื่อผู้เรียกอยากหมุนต่อ)
  */
-function placeWellInFrontOfHouse(
-  entity: Well,
+function placeInFrontOfHouse(
+  entity: SurfaceEntity,
   house: THREE.Object3D,
-  planetRadius: number = 10,
-  options: {
-    forwardDistance?: number;
-    rightOffset?: number;
-    sinkOffset?: number;
-  } = {},
-): void {
-  const {
-    forwardDistance = 3.2,
-    rightOffset = 2.2,
-    sinkOffset = 0.08,
-  } = options;
+  planetRadius: number,
+  opts: { forwardDistance: number; rightOffset: number; sinkOffset: number },
+): THREE.Spherical {
+  const { forwardDistance, rightOffset, sinkOffset } = opts;
 
-  // 1. อ่าน basis ของบ้านใน world space
+  // 1. basis ของบ้านใน world space
   house.updateMatrixWorld();
   const houseQuat = house.getWorldQuaternion(new THREE.Quaternion());
   const houseForward = new THREE.Vector3(0, 0, 1).applyQuaternion(houseQuat);
@@ -63,8 +61,96 @@ function placeWellInFrontOfHouse(
   const spherical = new THREE.Spherical().setFromVector3(targetOnSurface);
   entity.snapToSphere(planetRadius, spherical.phi, spherical.theta, sinkOffset);
 
-  // 6. หันหน้าบ่อน้ำเข้าหาตัวบ้าน
+  return spherical;
+}
+
+/**
+ * วางบ่อน้ำลงบนผิวดาวด้านหน้าประตูบ้าน เยื้องไปทางขวา และหันหน้าเข้าหาบ้าน
+ */
+function placeWellInFrontOfHouse(
+  entity: Well,
+  house: THREE.Object3D,
+  planetRadius: number = 10,
+): void {
+  // ระยะปลอดภัย: หน้าบ้าน 3.2 + เยื้องขวา 2.2 (ไม่ทับรัศมีบ้าน ~2.3)
+  placeInFrontOfHouse(entity, house, planetRadius, {
+    forwardDistance: 3.2,
+    rightOffset: 2.2,
+    sinkOffset: 0.08,
+  });
+  // หันหน้าบ่อน้ำเข้าหาตัวบ้าน
   entity.rotateOnSurface(Math.PI);
+}
+
+/**
+ * วางม้านั่งลงบนผิวดาวด้านหน้าบ้าน เยื้องไปทาง "ซ้าย" (ตรงข้ามบ่อน้ำ)
+ * ระยะห่างมากพอ (หน้าบ้าน 3.6) เพื่อไม่ให้แผ่นไม้/ขาจมเข้าไปในผนังบ้าน
+ */
+function placeBenchInFrontOfHouse(
+  entity: Bench,
+  house: THREE.Object3D,
+  planetRadius: number = 10,
+): void {
+  placeInFrontOfHouse(entity, house, planetRadius, {
+    forwardDistance: 3.6, // ม้านั่งอยู่หน้าบ้านแต่ไกลกว่าบ่อน้ำเล็กน้อย
+    rightOffset: -2.4, // เยื้องซ้าย (ตรงข้ามบ่อน้ำ)
+    sinkOffset: 0.04,
+  });
+  // หันด้านยาวของม้านั่งให้ขนานกับหน้าบ้าน (หน้าเข้าหาบ้าน)
+  entity.rotateOnSurface(Math.PI);
+}
+
+/**
+ * หันวัตถุให้ "แกน +Z" (ปากโรงรถ/หน้าวัตถุ) ขนานกับแนวถนนวงแหวนที่จุดนั้น
+ * ใช้คณิตศาสตร์เดียวกับ OrbitingEntity.updateOrbitTransform:
+ *   1. tangent ของวงกลมที่จุดนั้น (บนระนาบ X-Z)
+ *   2. หมุน tangent ด้วย roadTilt (ให้ขนานถนนจริงบนลูกโลก)
+ *   3. สร้าง basis (right, up, forward) → setFromRotationMatrix
+ *   4. snapToSphere ซ้ำเพื่อให้ตำแหน่ง/up ยังตั้งฉากผิวดาว แล้วค่อย set quaternion
+ *
+ * เป้าหมาย: รถที่วิ่งมาบนถนนจะหันจอดเข้าปากอุโมงค์ได้พอดี
+ */
+function orientAlongRoad(
+  entity: SurfaceEntity,
+  planetRadius: number,
+  polarAngle: number,
+  azimuthAngle: number,
+  roadTilt: THREE.Euler,
+  sinkOffset: number = 0.18,
+): void {
+  // 1. ตำแหน่งจริงของวัตถุหลัง snap (เพื่อให้ basis up ตรงผิวดาวจริง)
+  entity.snapToSphere(planetRadius, polarAngle, azimuthAngle, sinkOffset);
+  const upDir = entity.position.clone().normalize();
+
+  // 2. tangent ของเส้นวงกลม ณ azimuth นี้ (ระนาบ X-Z)
+  //    ⚠️ ใส่เครื่องหมายลบ ให้ปากโรงรถ (แกน +Z) หันไปทางเดียวกับที่รถวิ่งมาบนถนน
+  //    (tangent ดิบ (-sin,0,cos) ชี้ทวนเข็ม → กลับด้านให้หันรับรถที่วิ่งตามเข็ม)
+  const tangent = new THREE.Vector3(
+    Math.sin(azimuthAngle),
+    0,
+    -Math.cos(azimuthAngle),
+  );
+
+  // 3. หมุน tangent ตาม roadTilt (ให้ขนานระนาบถนนจริงที่เอียง)
+  const tiltQuat = new THREE.Quaternion().setFromEuler(roadTilt);
+  tangent.applyQuaternion(tiltQuat);
+
+  // 4. ตัดองค์ประกอบ radial ออกให้ tangent นอนบนระนาบ tangent ของผิวดาว
+  tangent.addScaledVector(upDir, -tangent.dot(upDir));
+  if (tangent.lengthSq() < 1e-6) {
+    // fallback กรณี tangent ขนาน up (ไม่ควรเกิด) → ใช้แกน X world
+    tangent.set(1, 0, 0).addScaledVector(upDir, -upDir.x);
+  }
+  tangent.normalize();
+
+  // 5. สร้าง basis ตั้งฉาก: right = up × forward, forward = right × up
+  const rightDir = new THREE.Vector3().crossVectors(upDir, tangent).normalize();
+  const forwardDir = new THREE.Vector3()
+    .crossVectors(rightDir, upDir)
+    .normalize();
+
+  const basis = new THREE.Matrix4().makeBasis(rightDir, upDir, forwardDir);
+  entity.quaternion.setFromRotationMatrix(basis);
 }
 
 /**
@@ -147,18 +233,31 @@ function bootstrap(): void {
   house.snapToSphere(planetRadius, 0.18, 0.35, 0.25).rotateOnSurface(0.2);
   engine.sceneManager.add(house);
 
-  // 3. สร้างโรงรถทรงครึ่งวงกลม (วางเยื้องไปด้านข้างของตัวบ้าน)
+  // 3. สร้างโรงรถทรงครึ่งวงกลม (วางให้ห่างจากบ้านพอ ไม่ชนกัน)
+  //    - ขยับ azimuth ออกห่างจากบ้านชัดเจน (บ้านอยู่ azimuth 0.35)
+  //    - หัน "ปากอุโมงค์" (แกน +Z) ขนานกับแนวถนนวงแหวน เพื่อให้รถวิ่งเข้าจอดได้จริง
+  const GARAGE_POLAR = 0.42;
+  const GARAGE_AZIMUTH = 1.75;
   const garage = new Garage();
-  garage.snapToSphere(planetRadius, 0.32, 1.05, 0.18).rotateOnSurface(-0.4);
+  garage.snapToSphere(planetRadius, GARAGE_POLAR, GARAGE_AZIMUTH, 0.18);
+  orientAlongRoad(
+    garage,
+    planetRadius,
+    GARAGE_POLAR,
+    GARAGE_AZIMUTH,
+    planet.roadTilt,
+  );
   engine.sceneManager.add(garage);
 
   // 4. สร้างพร็อพหน้าบ้าน: บ่อน้ำทรงกลม และ ม้านั่งยาวไม้
-  // ⚠️ บ่อน้ำ: วาง "ด้านหน้าประตูบ้าน" โดยอิงทิศ forward/right จริงของบ้าน (หลัง snap+rotate)
-  //    ไม่เดา azimuth ตายตัว → ไม่ทับ/ไม่ขวางประตู และเยื้องไปทางขวาของประตู
+  // ⚠️ ทั้งคู่วางโดยอิงทิศ forward/right จริงของบ้าน (หลัง snap+rotate) ไม่เดา azimuth
+  //    → อยู่ด้านหน้าบ้าน เยื้องคนละฝั่ง และไม่ทับ/ไม่ขวางประตูหรือตัวบ้าน
   const well = new Well();
   placeWellInFrontOfHouse(well, house);
+
+  // ม้านั่ง: อยู่หน้าบ้านแต่เยื้องไปทาง "ซ้าย" (ตรงข้ามบ่อน้ำ) ให้ห่างพอไม่จมผนังบ้าน
   const bench = new Bench();
-  bench.snapToSphere(planetRadius, 0.38, 0.48, 0.04).rotateOnSurface(0.15);
+  placeBenchInFrontOfHouse(bench, house);
 
   engine.sceneManager.add(well, bench);
 

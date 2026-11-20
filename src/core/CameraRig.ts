@@ -29,7 +29,7 @@ export class CameraRig implements IUpdatable, IDisposable {
     this.controls = new OrbitControls(this.camera, domElement);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.05;
-    this.controls.enablePan = false; // ปิดการเลื่อนจุดศูนย์กลาง เพื่อล็อกเป้าไว้ที่ดาวท่านไคโอเสมอ
+    this.controls.enablePan = false; // ล็อกเป้าไว้ที่ใจกลางดาว เพื่อหมุนดูรอบดาว
     this.controls.target.set(0, 0, 0);
 
     // 3. จัดระยะและขอบเขตซูมให้พอดีกับ aspect เริ่มต้น
@@ -76,8 +76,10 @@ export class CameraRig implements IUpdatable, IDisposable {
     );
 
     // ปรับขอบเขตซูมให้สอดคล้องกับระยะ fit
-    // (กัน OrbitControls ดึงกล้องกลับเข้า/ออกจนดาวถูกตัดหรือลอยเล็กเกินบนจอเล็ก)
-    this.controls.minDistance = Math.min(14, fitDistance * 0.9);
+    // ⭐ minDistance ต้องเผื่อระยะให้กล้องเข้าไปใกล้ "ผิวดาว" ได้
+    //    ดาวรัศมี 10 → กล้องอยู่ที่ระยะ ~11 จากใจกลาง (ห่างผิวดาว ~1 หน่วย)
+    //    จึงมองเห็นบ่อน้ำ/ปลาในระยะใกล้ได้ โดยไม่ทะลุเข้าไปในดาว
+    this.controls.minDistance = 11;
     this.controls.maxDistance = Math.max(45, fitDistance * 1.8);
     this.controls.update();
   }
