@@ -1,6 +1,29 @@
 /* src/style.css */
 @import "tailwindcss";
 
+/* ===== Loading Screen ===== */
+@keyframes loading-bar {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(360%);
+  }
+}
+
+.animate-loading-bar {
+  animation: loading-bar 1.2s ease-in-out infinite;
+}
+
+#loading-screen {
+  transition: opacity 0.7s ease-out;
+}
+#loading-screen.is-hidden {
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+}
+
 @layer base {
   html,
   body,
@@ -14,10 +37,23 @@
     -webkit-user-select: none;
   }
 
+  /* ใช้ viewport สูงสุดจริงบนมือถือ */
+  html,
+  body {
+    height: 100dvh;
+  }
+
+  /* กัน gesture ซูม/เลื่อนทั้งหน้าทับการหมุนกล้องบนจอสัมผัส */
+  #app {
+    touch-action: none;
+    overscroll-behavior: none;
+  }
+
   canvas {
     display: block;
     outline: none;
     cursor: grab;
+    touch-action: none;
   }
 
   canvas:active {

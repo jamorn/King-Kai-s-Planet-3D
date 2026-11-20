@@ -12,6 +12,85 @@ import { Well } from "./entities/props/Well";
 import { Bench } from "./entities/props/Bench";
 
 /**
+ * วางวัตถุ SurfaceEntity ลงบนผิวดาว "ด้านหน้าประตูบ้าน" อย่างแม่นยำ
+ * อ้างอิงทิศทางจริงของบ้านหลัง snapToSphere + rotateOnSurface:
+ *   - forward = แกน +Z ของบ้าน (ทิศที่ประตูหันหน้าไป)
+ *   - right   = แกน +X ของบ้าน (ทิศขวาของผู้ยืนหน้าประตู)
+ * เลื่อนออกไปหน้าบ้านตาม forward + right แล้ว project กลับมาบนผิวดาว
+ */
+function placeWellInFrontOfHouse(
+  entity: Well,
+  house: THREE.Object3D,
+  planetRadius: number = 10,
+  options: {
+    forwardDistance?: number;
+    rightOffset?: number;
+    sinkOffset?: number;
+  } = {},
+): void {
+  const {
+    forwardDistance = 3.2,
+    rightOffset = 2.2,
+    sinkOffset = 0.08,
+  } = options;
+
+  // 1. อ่าน basis ของบ้านใน world space
+  house.updateMatrixWorld();
+  const houseQuat = house.getWorldQuaternion(new THREE.Quaternion());
+  const houseForward = new THREE.Vector3(0, 0, 1).applyQuaternion(houseQuat);
+  const houseRight = new THREE.Vector3(1, 0, 0).applyQuaternion(houseQuat);
+
+  // 2. จุดอ้างอิงบนผิวดาว + surface normal
+  const housePos = new THREE.Vector3().setFromMatrixPosition(house.matrixWorld);
+  const surfaceNormal = housePos.clone().normalize();
+
+  // 3. ตัดองค์ประกอบ radial ออกให้ forward/right นอนบนระนาบ tangent
+  houseForward.addScaledVector(surfaceNormal, -houseForward.dot(surfaceNormal));
+  houseRight.addScaledVector(surfaceNormal, -houseRight.dot(surfaceNormal));
+  if (houseForward.lengthSq() < 1e-6) houseForward.copy(houseRight);
+  houseForward.normalize();
+  houseRight.normalize();
+
+  // 4. เลื่อนออกไปหน้า + ขวา แล้ว project กลับมาบนผิวดาว
+  const targetOnSurface = housePos
+    .clone()
+    .addScaledVector(houseForward, forwardDistance)
+    .addScaledVector(houseRight, rightOffset)
+    .normalize()
+    .multiplyScalar(planetRadius);
+
+  // 5. แปลงเป็นมุม spherical แล้ว snap ลงผิวดาว
+  const spherical = new THREE.Spherical().setFromVector3(targetOnSurface);
+  entity.snapToSphere(planetRadius, spherical.phi, spherical.theta, sinkOffset);
+
+  // 6. หันหน้าบ่อน้ำเข้าหาตัวบ้าน
+  entity.rotateOnSurface(Math.PI);
+}
+
+/**
+ * ซ่อน Loading Screen หลังเฟรมแรก render เสร็จจริง
+ * (รอ 2 เฟรมให้ GPU วาดเฟรมแรกเสร็จก่อน เพื่อไม่ให้เห็นจอว่างคั่นกลาง)
+ */
+function hideLoadingScreen(minDurationMs = 1500): void {
+  const loadingScreen = document.getElementById("loading-screen");
+  if (!loadingScreen) return;
+
+  const startTime = performance.now();
+
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      const elapsed = performance.now() - startTime;
+      const remaining = Math.max(0, minDurationMs - elapsed);
+
+      window.setTimeout(() => {
+        loadingScreen.classList.add("is-hidden");
+        window.setTimeout(() => loadingScreen.remove(), 800);
+      }, remaining);
+    });
+  });
+}
+
+/**
  * จุดเริ่มต้นของแอปพลิเคชัน (Application Bootstrap)
  * ประกอบวัตถุ Full OOP ทั้งหมดลงในฉากดาวท่านไคโอ
  */
@@ -34,9 +113,10 @@ function bootstrap(): void {
   engine.sceneManager.add(garage);
 
   // 4. สร้างพร็อพหน้าบ้าน: บ่อน้ำทรงกลม และ ม้านั่งยาวไม้
+  // ⚠️ บ่อน้ำ: วาง "ด้านหน้าประตูบ้าน" โดยอิงทิศ forward/right จริงของบ้าน (หลัง snap+rotate)
+  //    ไม่เดา azimuth ตายตัว → ไม่ทับ/ไม่ขวางประตู และเยื้องไปทางขวาของประตู
   const well = new Well();
-  well.snapToSphere(planetRadius, 0.42, 0.12, 0.08);
-
+  placeWellInFrontOfHouse(well, house);
   const bench = new Bench();
   bench.snapToSphere(planetRadius, 0.38, 0.48, 0.04).rotateOnSurface(0.15);
 
@@ -82,6 +162,9 @@ function bootstrap(): void {
 
   // 8. เริ่มต้น Render Loop!
   engine.start();
+
+  // ✅ ซ่อน Loading Screen หลังเฟรมแรก render เสร็จ
+  hideLoadingScreen();
 
   // คืนทรัพยากรเมื่อปิดหน้าเว็บ
   window.addEventListener("beforeunload", () => {
